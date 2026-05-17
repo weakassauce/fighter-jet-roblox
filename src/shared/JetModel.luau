@@ -178,14 +178,64 @@ local function findAsset(assetName: string): Instance?
 	return nil
 end
 
+local function tryBuildFromMeshData(label: string): Model?
+	local shared = ReplicatedStorage:FindFirstChild("Shared")
+	if not shared then
+		return nil
+	end
+	local dataModule = shared:FindFirstChild(label .. "MeshData")
+	if not (dataModule and dataModule:IsA("ModuleScript")) then
+		return nil
+	end
+	local ok, data = pcall(require, dataModule)
+	if not ok then
+		warn("[JetModel] failed to require mesh data:", data)
+		return nil
+	end
+	local builderModule = shared:FindFirstChild("JetMeshBuilder")
+	if not (builderModule and builderModule:IsA("ModuleScript")) then
+		return nil
+	end
+	local okB, JetMeshBuilder = pcall(require, builderModule)
+	if not okB then
+		return nil
+	end
+	local okPart, meshPart = pcall(function()
+		return JetMeshBuilder.build(data, label .. "Mesh")
+	end)
+	if not okPart or not meshPart then
+		warn("[JetModel] EditableMesh build failed:", meshPart)
+		return nil
+	end
+	local model = Instance.new("Model")
+	model.Name = label
+	(meshPart :: MeshPart).Parent = model
+	model.PrimaryPart = meshPart :: MeshPart
+
+	-- Center, flip 180° around Y so the nose points -Z, scale to TARGET_LENGTH
+	local pivotCF, size = model:GetBoundingBox()
+	model:PivotTo(model:GetPivot() - pivotCF.Position)
+	model:PivotTo(model:GetPivot() * CFrame.Angles(0, math.pi, 0))
+	local longest = math.max(size.X, size.Y, size.Z)
+	if longest > 0 and model.ScaleTo then
+		model:ScaleTo(TARGET_LENGTH / longest)
+	end
+	return model
+end
+
 function JetModel.build(name: string?, color: Color3?, accent: Color3?): Model
 	local label = name or "PlayerJet"
-	-- Prefer imported assets named "PlayerJet" / "EnemyJet" under Shared.
-	-- (Drop a .rbxm into src/shared/ with that name to use a real GLB asset.)
+	-- 1) Imported .rbxm asset under ReplicatedStorage.Shared.<label>
 	local source = findAsset(label)
 	if source then
 		return normalizeAsset(source, label, TARGET_LENGTH)
 	end
+	-- 2) Generated vertex/triangle data + EditableMesh
+	local built = tryBuildFromMeshData(label)
+	if built then
+		return built
+	end
+	-- 3) Fallback: placeholder primitives
 	return buildPlaceholder(label, color, accent)
 end
 
