@@ -16,15 +16,42 @@ if player.Character then
 	player.Character:Destroy()
 end
 
--- Build the jet (cycle through: imported .rbxm → mesh data → placeholder).
+-- Status panel: shows which build path won (useful when Output panel is closed).
+local gui = Instance.new("ScreenGui")
+gui.Name = "BuildStatus"
+gui.IgnoreGuiInset = true
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(0, 460, 0, 24)
+statusLabel.Position = UDim2.new(0, 12, 0, 12)
+statusLabel.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+statusLabel.BackgroundTransparency = 0.4
+statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+statusLabel.Font = Enum.Font.Code
+statusLabel.TextSize = 16
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Text = "building jet..."
+statusLabel.Parent = gui
+
 print("[init] building jet...")
 local okBuild, jetOrErr = pcall(JetModel.build, "PlayerJet")
 local jet: Model
 if okBuild and jetOrErr then
 	jet = jetOrErr :: Model
+	-- Try to detect which path won by looking at the model's children
+	local kind = "placeholder"
+	for _, d in ipairs(jet:GetDescendants()) do
+		if d.Name == "PlayerJetMesh" then
+			kind = "EditableMesh (painted)"
+			break
+		end
+	end
+	statusLabel.Text = "✓ jet: " .. kind
 else
 	warn("[init] JetModel.build errored:", jetOrErr)
-	-- Last-resort red cube so something is on screen
+	statusLabel.Text = "✗ build error: " .. tostring(jetOrErr):sub(1, 200)
+	statusLabel.BackgroundColor3 = Color3.fromRGB(120, 20, 20)
 	jet = Instance.new("Model")
 	local p = Instance.new("Part")
 	p.Size = Vector3.new(20, 4, 10)
