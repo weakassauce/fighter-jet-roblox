@@ -1,0 +1,54 @@
+{
+  "name": "FighterJet",
+  "tree": {
+    "$className": "DataModel",
+
+    "ReplicatedStorage": {
+      "$className": "ReplicatedStorage",
+      "Shared": {
+        "$path": "src/shared"
+      }
+    },
+
+    "ServerScriptService": {
+      "$className": "ServerScriptService",
+      "Server": {
+        "$path": "src/server"
+      }
+    },
+
+    "StarterPlayer": {
+      "$className": "StarterPlayer",
+      "StarterPlayerScripts": {
+        "$className": "StarterPlayerScripts",
+        "Client": {
+          "$path": "src/client"
+        }
+      }
+    },
+
+    "Workspace": {
+      "$className": "Workspace",
+      "$properties": {
+        "StreamingEnabled": true,
+        "Gravity": 196.2
+      }
+    },
+
+    "Lighting": {
+      "$className": "Lighting",
+      "$properties": {
+        "Ambient": [0.45, 0.50, 0.55],
+        "ClockTime": 13,
+        "FogColor": [0.62, 0.83, 1.0],
+        "FogStart": 800,
+        "FogEnd": 8000,
+        "Technology": "Future"
+      }
+    },
+
+    "SoundService": {
+      "$className": "SoundService"
+    }
+  }
+}
