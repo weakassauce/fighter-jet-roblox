@@ -38,6 +38,19 @@ jet.Parent = Workspace
 jet:PivotTo(CFrame.new(0, 20, 0))
 print("[init] jet placed at", jet:GetPivot().Position, "size", select(2, jet:GetBoundingBox()))
 
+-- Bright debug marker at the orbit center so we can confirm the camera is pointed
+-- at the right spot even if the jet hasn't built.
+local marker = Instance.new("Part")
+marker.Name = "OrbitCenterMarker"
+marker.Shape = Enum.PartType.Ball
+marker.Size = Vector3.new(2, 2, 2)
+marker.Material = Enum.Material.Neon
+marker.Color = Color3.fromRGB(255, 80, 220)
+marker.Anchored = true
+marker.CanCollide = false
+marker.Position = Vector3.new(0, 20, 0)
+marker.Parent = Workspace
+
 -- Orbit camera state
 local camera = Workspace.CurrentCamera
 camera.CameraType = Enum.CameraType.Scriptable
@@ -51,12 +64,15 @@ local YAW_SPEED = 0.006
 local PITCH_SPEED = 0.005
 
 local draggingL, draggingR = false, false
+local keys: { [Enum.KeyCode]: boolean } = {}
 
 UserInputService.InputBegan:Connect(function(io: InputObject)
 	if io.UserInputType == Enum.UserInputType.MouseButton1 then
 		draggingL = true
 	elseif io.UserInputType == Enum.UserInputType.MouseButton2 then
 		draggingR = true
+	elseif io.UserInputType == Enum.UserInputType.Keyboard then
+		keys[io.KeyCode] = true
 	end
 end)
 UserInputService.InputEnded:Connect(function(io: InputObject)
@@ -64,6 +80,8 @@ UserInputService.InputEnded:Connect(function(io: InputObject)
 		draggingL = false
 	elseif io.UserInputType == Enum.UserInputType.MouseButton2 then
 		draggingR = false
+	elseif io.UserInputType == Enum.UserInputType.Keyboard then
+		keys[io.KeyCode] = nil
 	end
 end)
 UserInputService.InputChanged:Connect(function(io: InputObject)
@@ -77,7 +95,38 @@ UserInputService.InputChanged:Connect(function(io: InputObject)
 	end
 end)
 
-RunService.RenderStepped:Connect(function(_dt: number)
+-- Keep cursor visible / unlocked so mouse drag works the way the player expects
+UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+UserInputService.MouseIconEnabled = true
+
+local KB_YAW_SPEED = 1.8     -- rad/s
+local KB_PITCH_SPEED = 1.4
+local KB_ZOOM_SPEED = 35     -- studs/s
+
+RunService.RenderStepped:Connect(function(dt: number)
+	-- Keyboard orbit (works regardless of mouse capture):
+	--   A/← yaw left, D/→ yaw right, W/↑ tilt up, S/↓ tilt down
+	--   E zoom in, Q zoom out
+	local k = keys
+	if k[Enum.KeyCode.A] or k[Enum.KeyCode.Left] then
+		yaw -= KB_YAW_SPEED * dt
+	end
+	if k[Enum.KeyCode.D] or k[Enum.KeyCode.Right] then
+		yaw += KB_YAW_SPEED * dt
+	end
+	if k[Enum.KeyCode.W] or k[Enum.KeyCode.Up] then
+		pitch = math.clamp(pitch - KB_PITCH_SPEED * dt, -PITCH_LIMIT, PITCH_LIMIT)
+	end
+	if k[Enum.KeyCode.S] or k[Enum.KeyCode.Down] then
+		pitch = math.clamp(pitch + KB_PITCH_SPEED * dt, -PITCH_LIMIT, PITCH_LIMIT)
+	end
+	if k[Enum.KeyCode.E] then
+		dist = math.clamp(dist - KB_ZOOM_SPEED * dt, MIN_DIST, MAX_DIST)
+	end
+	if k[Enum.KeyCode.Q] then
+		dist = math.clamp(dist + KB_ZOOM_SPEED * dt, MIN_DIST, MAX_DIST)
+	end
+
 	local target = jet:GetPivot().Position
 	local cosP, sinP = math.cos(pitch), math.sin(pitch)
 	local offset = Vector3.new(math.sin(yaw) * cosP, sinP, math.cos(yaw) * cosP) * dist
