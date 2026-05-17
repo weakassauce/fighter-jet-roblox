@@ -1,8 +1,80 @@
 --!strict
--- Builds a placeholder fighter-jet Model from primitives.
--- Local forward is -Z (Roblox standard, matches CFrame.LookVector).
+-- Builds a fighter-jet Model. If ReplicatedStorage.Shared.PlayerJet (or
+-- EnemyJet) exists — e.g. a GLB imported via Studio and saved as .rbxm —
+-- that asset is cloned and normalized. Otherwise we build a placeholder
+-- from primitives. Local forward is -Z (matches Roblox CFrame.LookVector).
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local JetModel = {}
+
+local TARGET_LENGTH = 28 -- studs along longest axis
+
+-- Take an imported asset (Model or BasePart) and prepare it for flight:
+-- wrap in a Model with PrimaryPart set, anchor + no-collide everything,
+-- center the bounding box at origin, flip Y=π (TRELLIS GLBs face +Z by
+-- default), and scale to TARGET_LENGTH along the longest axis.
+local function normalizeAsset(template: Instance, name: string, length: number): Model
+	local model: Model
+	if template:IsA("Model") then
+		model = template:Clone() :: Model
+	elseif template:IsA("BasePart") then
+		model = Instance.new("Model")
+		local part = template:Clone()
+		part.Parent = model
+		model.PrimaryPart = part :: BasePart
+	else
+		-- Folder or other container — collect any BaseParts found.
+		model = Instance.new("Model")
+		for _, child in ipairs(template:GetDescendants()) do
+			if child:IsA("BasePart") then
+				local p = child:Clone()
+				p.Parent = model
+				if not model.PrimaryPart then
+					model.PrimaryPart = p
+				end
+			end
+		end
+	end
+	model.Name = name
+
+	-- Configure every BasePart for jet use
+	for _, d in ipairs(model:GetDescendants()) do
+		if d:IsA("BasePart") then
+			d.Anchored = true
+			d.CanCollide = false
+			d.CanQuery = false
+			d.CanTouch = false
+			d.Massless = true
+		end
+	end
+
+	-- Ensure a PrimaryPart for any code that wants it
+	if not model.PrimaryPart then
+		for _, d in ipairs(model:GetDescendants()) do
+			if d:IsA("BasePart") then
+				model.PrimaryPart = d
+				break
+			end
+		end
+	end
+	assert(model.PrimaryPart, "imported asset has no BasePart")
+
+	-- Center bounding box at origin
+	local pivot, size = model:GetBoundingBox()
+	model:PivotTo(model:GetPivot() - pivot.Position)
+
+	-- Flip 180° around Y so TRELLIS's +Z nose points toward -Z (Roblox forward)
+	model:PivotTo(model:GetPivot() * CFrame.Angles(0, math.pi, 0))
+
+	-- Scale to TARGET_LENGTH on longest axis (pivot is at origin, so this scales around center)
+	local longest = math.max(size.X, size.Y, size.Z)
+	if longest > 0 and model.ScaleTo then
+		model:ScaleTo(length / longest)
+	end
+
+	return model
+end
 
 local function makePart(name: string, size: Vector3, color: Color3, material: Enum.Material?): Part
 	local p = Instance.new("Part")
@@ -32,7 +104,7 @@ local function wedge(name: string, size: Vector3, color: Color3): WedgePart
 	return w
 end
 
-function JetModel.build(name: string?, color: Color3?, accent: Color3?): Model
+local function buildPlaceholder(name: string?, color: Color3?, accent: Color3?): Model
 	local jet = Instance.new("Model")
 	jet.Name = name or "PlayerJet"
 
@@ -90,6 +162,31 @@ function JetModel.build(name: string?, color: Color3?, accent: Color3?): Model
 
 	jet.PrimaryPart = fuselage
 	return jet
+end
+
+-- Try to source a model from ReplicatedStorage.Shared by name (e.g. "PlayerJet"
+-- saved from a Studio GLB import). Returns nil if not present.
+local function findAsset(assetName: string): Instance?
+	local shared = ReplicatedStorage:FindFirstChild("Shared")
+	if not shared then
+		return nil
+	end
+	local asset = shared:FindFirstChild(assetName)
+	if asset and (asset:IsA("Model") or asset:IsA("BasePart") or asset:IsA("Folder")) then
+		return asset
+	end
+	return nil
+end
+
+function JetModel.build(name: string?, color: Color3?, accent: Color3?): Model
+	local label = name or "PlayerJet"
+	-- Prefer imported assets named "PlayerJet" / "EnemyJet" under Shared.
+	-- (Drop a .rbxm into src/shared/ with that name to use a real GLB asset.)
+	local source = findAsset(label)
+	if source then
+		return normalizeAsset(source, label, TARGET_LENGTH)
+	end
+	return buildPlaceholder(label, color, accent)
 end
 
 return JetModel
