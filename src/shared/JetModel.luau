@@ -181,39 +181,52 @@ end
 local function tryBuildFromMeshData(label: string): Model?
 	local shared = ReplicatedStorage:FindFirstChild("Shared")
 	if not shared then
+		print("[JetModel] no Shared folder")
 		return nil
 	end
 	local dataModule = shared:FindFirstChild(label .. "MeshData")
 	if not (dataModule and dataModule:IsA("ModuleScript")) then
+		print("[JetModel] no", label .. "MeshData module — skipping mesh path")
 		return nil
 	end
+	print("[JetModel] requiring", dataModule:GetFullName())
 	local ok, data = pcall(require, dataModule)
 	if not ok then
 		warn("[JetModel] failed to require mesh data:", data)
 		return nil
 	end
+	print("[JetModel] data loaded:", #data.vertices, "verts,", #data.triangles, "tris")
+
 	local builderModule = shared:FindFirstChild("JetMeshBuilder")
 	if not (builderModule and builderModule:IsA("ModuleScript")) then
+		warn("[JetModel] no JetMeshBuilder module")
 		return nil
 	end
 	local okB, JetMeshBuilder = pcall(require, builderModule)
 	if not okB then
+		warn("[JetModel] failed to require JetMeshBuilder:", JetMeshBuilder)
 		return nil
 	end
-	local okPart, meshPart = pcall(function()
+
+	print("[JetModel] building EditableMesh →", label)
+	local okPart, meshPartOrErr = pcall(function()
 		return JetMeshBuilder.build(data, label .. "Mesh")
 	end)
-	if not okPart or not meshPart then
-		warn("[JetModel] EditableMesh build failed:", meshPart)
+	if not okPart or not meshPartOrErr then
+		warn("[JetModel] EditableMesh build failed:", meshPartOrErr)
 		return nil
 	end
+	local meshPart = meshPartOrErr :: MeshPart
+	print("[JetModel] meshPart created, size", meshPart.Size)
+
 	local model = Instance.new("Model")
 	model.Name = label
-	(meshPart :: MeshPart).Parent = model
-	model.PrimaryPart = meshPart :: MeshPart
+	meshPart.Parent = model
+	model.PrimaryPart = meshPart
 
-	-- Center, flip 180° around Y so the nose points -Z, scale to TARGET_LENGTH
+	-- Center, flip 180° around Y so nose points -Z, scale to TARGET_LENGTH
 	local pivotCF, size = model:GetBoundingBox()
+	print("[JetModel] bbox size", size)
 	model:PivotTo(model:GetPivot() - pivotCF.Position)
 	model:PivotTo(model:GetPivot() * CFrame.Angles(0, math.pi, 0))
 	local longest = math.max(size.X, size.Y, size.Z)
@@ -225,17 +238,24 @@ end
 
 function JetModel.build(name: string?, color: Color3?, accent: Color3?): Model
 	local label = name or "PlayerJet"
-	-- 1) Imported .rbxm asset under ReplicatedStorage.Shared.<label>
+	print("[JetModel] build('" .. label .. "')")
+
 	local source = findAsset(label)
 	if source then
+		print("[JetModel] using imported .rbxm asset", source:GetFullName())
 		return normalizeAsset(source, label, TARGET_LENGTH)
 	end
-	-- 2) Generated vertex/triangle data + EditableMesh
-	local built = tryBuildFromMeshData(label)
-	if built then
+
+	local ok, built = pcall(tryBuildFromMeshData, label)
+	if ok and built then
+		print("[JetModel] using EditableMesh-built model")
 		return built
 	end
-	-- 3) Fallback: placeholder primitives
+	if not ok then
+		warn("[JetModel] tryBuildFromMeshData threw:", built)
+	end
+
+	print("[JetModel] falling back to primitive placeholder")
 	return buildPlaceholder(label, color, accent)
 end
 

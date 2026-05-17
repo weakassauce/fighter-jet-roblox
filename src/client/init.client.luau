@@ -23,9 +23,28 @@ if player.Character then
 	player.Character:Destroy()
 end
 
-local jet = JetModel.build("PlayerJet")
+print("[init] building jet...")
+local okBuild, jetOrErr = pcall(JetModel.build, "PlayerJet")
+if not okBuild then
+	warn("[init] JetModel.build errored:", jetOrErr)
+	-- Last-resort: a giant cube so we can confirm rendering works
+	local fallback = Instance.new("Part")
+	fallback.Size = Vector3.new(30, 6, 30)
+	fallback.Color = Color3.fromRGB(255, 80, 80)
+	fallback.Anchored = true
+	fallback.CanCollide = false
+	fallback.Parent = Workspace
+	local m = Instance.new("Model")
+	m.Name = "PlayerJet"
+	fallback.Parent = m
+	m.PrimaryPart = fallback
+	m.Parent = Workspace
+	jetOrErr = m
+end
+local jet = jetOrErr :: Model
 jet.Parent = Workspace
 jet:PivotTo(CFrame.new(0, 600, 0))
+print("[init] jet ready at", jet:GetPivot().Position)
 
 local flight = Flight.new(jet)
 local input = Input.new()
