@@ -34,12 +34,15 @@ statusLabel.TextXAlignment = Enum.TextXAlignment.Left
 statusLabel.Text = "building jet..."
 statusLabel.Parent = gui
 
+-- Make the status panel scroll-friendly for long error messages
+statusLabel.Size = UDim2.new(0, 900, 0, 60)
+statusLabel.TextWrapped = true
+
 print("[init] building jet...")
 local okBuild, jetOrErr = pcall(JetModel.build, "PlayerJet")
 local jet: Model
 if okBuild and jetOrErr then
 	jet = jetOrErr :: Model
-	-- Try to detect which path won by looking at the model's children
 	local kind = "placeholder"
 	for _, d in ipairs(jet:GetDescendants()) do
 		if d.Name == "PlayerJetMesh" then
@@ -47,10 +50,15 @@ if okBuild and jetOrErr then
 			break
 		end
 	end
-	statusLabel.Text = "✓ jet: " .. kind
+	if kind == "placeholder" and JetModel.lastError then
+		statusLabel.Text = "placeholder (mesh fell back). reason: " .. JetModel.lastError
+		statusLabel.BackgroundColor3 = Color3.fromRGB(120, 70, 0)
+	else
+		statusLabel.Text = "✓ jet: " .. kind
+	end
 else
 	warn("[init] JetModel.build errored:", jetOrErr)
-	statusLabel.Text = "✗ build error: " .. tostring(jetOrErr):sub(1, 200)
+	statusLabel.Text = "✗ build error: " .. tostring(jetOrErr):sub(1, 400)
 	statusLabel.BackgroundColor3 = Color3.fromRGB(120, 20, 20)
 	jet = Instance.new("Model")
 	local p = Instance.new("Part")

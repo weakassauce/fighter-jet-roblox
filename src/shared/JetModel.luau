@@ -7,6 +7,7 @@
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local JetModel = {}
+JetModel.lastError = nil :: string?
 
 local TARGET_LENGTH = 28 -- studs along longest axis
 
@@ -179,41 +180,42 @@ local function findAsset(assetName: string): Instance?
 end
 
 local function tryBuildFromMeshData(label: string): Model?
+	JetModel.lastError = nil
 	local shared = ReplicatedStorage:FindFirstChild("Shared")
 	if not shared then
-		print("[JetModel] no Shared folder")
+		JetModel.lastError = "no Shared folder"
 		return nil
 	end
 	local dataModule = shared:FindFirstChild(label .. "MeshData")
 	if not (dataModule and dataModule:IsA("ModuleScript")) then
-		print("[JetModel] no", label .. "MeshData module — skipping mesh path")
+		JetModel.lastError = "no " .. label .. "MeshData module"
 		return nil
 	end
-	print("[JetModel] requiring", dataModule:GetFullName())
 	local ok, data = pcall(require, dataModule)
 	if not ok then
-		warn("[JetModel] failed to require mesh data:", data)
+		JetModel.lastError = "require mesh data: " .. tostring(data)
+		warn("[JetModel] " .. JetModel.lastError)
 		return nil
 	end
 	print("[JetModel] data loaded:", #data.vertices, "verts,", #data.triangles, "tris")
 
 	local builderModule = shared:FindFirstChild("JetMeshBuilder")
 	if not (builderModule and builderModule:IsA("ModuleScript")) then
-		warn("[JetModel] no JetMeshBuilder module")
+		JetModel.lastError = "no JetMeshBuilder module"
 		return nil
 	end
 	local okB, JetMeshBuilder = pcall(require, builderModule)
 	if not okB then
-		warn("[JetModel] failed to require JetMeshBuilder:", JetMeshBuilder)
+		JetModel.lastError = "require JetMeshBuilder: " .. tostring(JetMeshBuilder)
+		warn("[JetModel] " .. JetModel.lastError)
 		return nil
 	end
 
 	print("[JetModel] building EditableMesh →", label)
-	local okPart, meshPartOrErr = pcall(function()
-		return JetMeshBuilder.build(data, label .. "Mesh")
-	end)
+	local okPart, meshPartOrErr = pcall(JetMeshBuilder.build, data, label .. "Mesh")
 	if not okPart or not meshPartOrErr then
-		warn("[JetModel] EditableMesh build failed:", meshPartOrErr)
+		JetModel.lastError = tostring(meshPartOrErr)
+		warn("[JetModel] EditableMesh build failed: " .. JetModel.lastError)
 		return nil
 	end
 	local meshPart = meshPartOrErr :: MeshPart
